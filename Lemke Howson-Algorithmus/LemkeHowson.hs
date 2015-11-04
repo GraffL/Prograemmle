@@ -170,12 +170,47 @@ makeMonoms (v, k) (b:bs) = Monoms ((Monom b (v ++ (show k))):ms)
 --------
 
   
-
-
+main = do
+    (gls1, gls2) <- initialize
+    (gls3, gls4) <- step (gls1, gls2)
+    
+    putStrLn "\nLetzter Zustand der Gleichungssysteme:"
+    putStrLn . show $ gls3
+    putStrLn . show $ gls4
   
     
+initialize :: IO (GLS, GLS)
+initialize = do
+    putStrLn "Nutzenmatrix von SP1 eingeben (in der Form 1%1 1%2 3%4 1%2)"
+    a_input <- getLine
+    putStrLn "Transponierte Nutzenmatrix )von SP2 eingeben (in der Form 1%1 1%2 3%4 1%2)"
+    b_input <- getLine
+    putStrLn "Zahl der reinen Strategien von SP1"
+    m_input <- getLine
+    putStrLn "Zahl der reinen Strategien von SP2"
+    n_input <- getLine
+
+    return $ makeTableaus (read m_input) (read n_input) (map read $ words a_input) (map read $ words b_input)
     
-    
+
+step :: (GLS, GLS) -> IO (GLS, GLS)
+step (gls1, gls2) = do
+    putStrLn "Gleichungen für 1. Polyeder:"
+    putStrLn . show $ gls1
+    putStrLn "Gleichungen für 2. Polyeder:"
+    putStrLn . show $ gls2
+    putStrLn "Welche Variable soll zur Basisvariable werden ('q' zum Beenden)"
+    var <- getLine
+    if var == "q" then
+        return (gls1, gls2)
+    else do
+        putStrLn "In welchem Gleichungssystem (1/2)?"
+        nr <- getLine
+        if read nr == 1 then
+            step (makeBasisvar var gls1, gls2)
+        else
+            step (gls1, makeBasisvar var gls2)
+           
     
     
     
