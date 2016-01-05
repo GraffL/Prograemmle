@@ -183,7 +183,7 @@ initialize :: IO (GLS, GLS)
 initialize = do
     putStrLn "Nutzenmatrix von SP1 eingeben (in der Form 1%1 1%2 3%4 1%2)"
     a_input <- getLine
-    putStrLn "Transponierte Nutzenmatrix )von SP2 eingeben (in der Form 1%1 1%2 3%4 1%2)"
+    putStrLn "Transponierte Nutzenmatrix von SP2 eingeben (in der Form 1%1 1%2 3%4 1%2)"
     b_input <- getLine
     putStrLn "Zahl der reinen Strategien von SP1"
     m_input <- getLine
@@ -222,3 +222,4 @@ b = [2,1,0,1,3,0,0,1,3]
 c = [4,1,0,0,3,1,1,2,3]
 d = [1,2,3,2,0,1,0,2,1]
 (gls3,gls4) = makeTableaus 3 3 c d
+
