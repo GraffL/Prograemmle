@@ -117,7 +117,7 @@ class Tableau:
         return True
 
 
-    def simplex(self,basis,verbose=False):
+    def simplex(self,basis,verbose=False, tex=False):
         if not self.hasStandardForm:
             self.T = self.standardizeTableau(basis)
             self.hasStandardForm = True
@@ -127,6 +127,8 @@ class Tableau:
             if verbose:
                 self.printTableau()
                 print("Pivot-Element: ", p, s)
+            if tex:
+                self.printTableau(True,pivot=(p,s))
 
             if s == 0:
                 self.solved = True
@@ -140,8 +142,13 @@ class Tableau:
         return self.finiteSolution
 
 
-    def determineAllVertices(self,onlyFeasible=True):
+    def determineAllVertices(self,onlyFeasible=True,noDuplicates=False):
+        # Determines all bases with corresponding vertex of the given polyhedron
+        # onlyFeasible excludes infeasible bases
+        # noDuplicates only gives back one base for every vertex (relevant for degenerate vertives)
+
         allPossibleBasis = combinations(range(1,self.n+1),self.m)
+        allVertices = {}
         for posBasis in allPossibleBasis:
             T = self.standardizeTableau(posBasis)
             if not T is None:
@@ -153,7 +160,105 @@ class Tableau:
                         feasible = False
 
                 if feasible or not onlyFeasible:
-                    print("Basis",posBasis,"with solution",x)
+                    if not (noDuplicates and x in allVertices.values()):
+                        allVertices[posBasis] = x
+
+        return allVertices
+
+
+    def determineAllEdges(self,bidirect=False):
+        # Determines all Edges of the given polyhedron (i.e. pairs of neighbouring vertices)
+        # bidirect=True lists all edges in both directions
+        # If multiple bases represent the same vertex, on bases is chosen to represent this vertex
+
+        # A dictonary containing for all bases the corresponding vertex (if feasible)
+        allVerticesWDup = self.determineAllVertices(onlyFeasible=True, noDuplicates=False)
+        # The same dictonary but for points represented by multiple bases only one is present
+        allVertices = self.determineAllVertices(onlyFeasible=True, noDuplicates=True)
+
+        # A dictonary containing for every representation-base the set of bases they represent
+        vertexDictUnique = {}
+        # A dictonary containing for every base, by which base it are represented
+        vertexDictMult = {}
+        # Build up both these dictonaries:
+        while len(allVerticesWDup) > 0:
+            (basis,x) = allVerticesWDup.popitem()
+            for key in allVertices:
+                value = allVertices[key]
+                if value == x:
+                    if key not in vertexDictUnique:
+                        vertexDictUnique[key] = []
+                    vertexDictUnique[key].append(basis)
+                    vertexDictMult[basis] = key
+                    break
+
+        # A dictonary containing for every representing base all the (representing) neighboring bases
+        allEdges = {}
+        # Building this dictonary:
+        while len(allVertices) > 0:
+            (basis, x) = allVertices.popitem()
+
+            # Create entry if not already present
+            if basis not in allEdges:
+                allEdges[basis] = []
+
+            # Consider all possibles bases representing the current vertex:
+            for varBasis in vertexDictUnique[basis]:
+                # Consider all base-elements, which could be replaced
+                for k in range(0, self.m):
+                    # Consider all possible replacements:
+                    for i in range(1, self.n + 1):
+                        # Create the potential neighbor bases:
+                        nBasis = list(varBasis).copy()
+                        nBasis[k] = i
+                        nBasis.sort()
+                        nBasis = tuple(nBasis)
+                        # Check whether this is a base
+                        if nBasis in vertexDictMult:
+                            # Check whether it corresponse to a different vertex and the resulting edge is not already in the list
+                            if vertexDictMult[nBasis] != basis and vertexDictMult[nBasis] not in allEdges[basis]:
+                                # Only add the edge if we want edges in both directions or the reverse edge is not already included:
+                                if bidirect or vertexDictMult[nBasis] not in allEdges:
+                                    allEdges[basis].append(vertexDictMult[nBasis])
+
+        return allEdges
+
+
+
+    def printAllVertices(self,onlyFeasible=True,noDuplicates=False):
+        allVertices = self.determineAllVertices(onlyFeasible,noDuplicates)
+        while len(allVertices) > 0:
+            (basis,x) = allVertices.popitem()
+            print("Basis", basis, "with solution", x)
+
+
+    def printAllEdges(self,tex=False,style=""):
+        # Prints all Edges of the given polyhedron (i.e. pairs of neighbouring vertices)
+        # Either as text or in tikz-Format (with style as attribute for each edge)
+
+        allVertices = self.determineAllVertices(onlyFeasible=True,noDuplicates=False)
+        allEdges = self.determineAllEdges()
+
+        while len(allEdges) > 0:
+            (basis, edgeList) = allEdges.popitem()
+            for nBasis in edgeList:
+                x = allVertices[basis]
+                y = allVertices[nBasis]
+
+                if tex:
+                    # TeX-Style:
+                    vertexOne = str(x[2].numerator) + "/" + str(x[2].denominator) + ", " \
+                                + str(x[0].numerator) + "/" + str(x[0].denominator) + ", "\
+                                + str(x[1].numerator) + "/" + str(x[1].denominator)
+                    y = allVertices[tuple(nBasis)]
+                    vertexTwo = str(y[2].numerator) + "/" + str(y[2].denominator) + ", " \
+                                + str(y[0].numerator) + "/" + str(y[0].denominator) + ", " \
+                                + str(y[1].numerator) + "/" + str(y[1].denominator)
+
+                    print("\\draw[",style,"] (",vertexOne,") -- (",vertexTwo,");")
+                else:
+                    # Plain Text:
+                    print(basis, " -- ", nBasis, ": ", x, " -- ", allVertices[tuple(nBasis)])
 
 
 
@@ -174,28 +279,60 @@ class Tableau:
         return r
 
 
-    def printTableau(self):
-        maxSize = 8
-        def elementString(s,ss="",sss=""):
-            s = str(s)+str(ss)+str(sss)
-            return " " + s + (maxSize-len(s)-1)*" "
+    def printTableau(self,tex=False,pivot=(0,0)):
+        if tex:
+            def fTs(fract):
+                if fract.denominator == 1:
+                    return str(fract.numerator)
+                return str(fract.numerator) + "/" + str(fract.denominator)
 
-        print("------------------------------------------------------------------")
-        print(elementString(""),elementString(""),"|",end="")
-        for j in range(1, self.n - self.m + 1):
-            print(elementString("x_"+str(self.N[j-1])), end="")
-        print("\n", end="")
-        print(elementString(""),elementString(self.T[0][0].numerator, "/", self.T[0][0].denominator), "|", end="")
-        for j in range(1, self.n - self.m + 1):
-            print(elementString(self.T[0][j].numerator, "/", self.T[0][j].denominator), end="")
-        print("\n", end="")
-        print("------------------------------------------------------------------")
-        for i in range(1,self.m+1):
-            print(elementString("x_"+str(self.B[i-1])),elementString(self.T[i][0].numerator,"/",self.T[i][0].denominator),"|",end="")
-            for j in range(1,self.n-self.m+1):
-                print(elementString(self.T[i][j].numerator,"/",self.T[i][j].denominator),end="")
-            print("\n",end="")
-        print("------------------------------------------------------------------")
+            print("\\begin{tabular}{c|c|",(self.n-self.m)*"c","|}",sep="")
+            print("\t","\\multicolumn{1}{c}{} & \\multicolumn{1}{c}{} ",end="")
+            for nB in self.N:
+                print("& \\multicolumn{1}{c}{$x_"+str(nB)+"$}",end=" ")
+            print("\\\\ \\cline{2-"+str(self.n-self.m+2)+"}")
+
+            print("$z(x),r_N$ &", end="")
+            print("$",fTs(self.T[0][0]),"$", end="")
+            for j in range(1, self.n - self.m + 1):
+                print("& $", fTs(self.T[0][j]), "$", end="")
+            print("\\\\\\cline{2-"+str(self.n-self.m+2)+"}\n", end="")
+
+            for i in range(1, self.m + 1):
+                print("$x_" + str(self.B[i - 1]), "$ &", end="")
+                print("$",fTs(self.T[i][0]),"$", end="")
+                for j in range(1, self.n - self.m + 1):
+                    if i==pivot[0] and j==pivot[1]:
+                        print("& $\\boxed{", fTs(self.T[i][j]), "}$", end="")
+                    else:
+                        print("& $",fTs(self.T[i][j]), "$", end="")
+                print("\\\\\n", end="")
+
+            print("\\cline{2-"+str(self.n-self.m+2)+"}")
+            print("\\end{tabular}")
+
+        else:
+            maxSize = 8
+            def elementString(s,ss="",sss=""):
+                s = str(s)+str(ss)+str(sss)
+                return " " + s + (maxSize-len(s)-1)*" "
+
+            print("------------------------------------------------------------------")
+            print(elementString(""),elementString(""),"|",end="")
+            for j in range(1, self.n - self.m + 1):
+                print(elementString("x_"+str(self.N[j-1])), end="")
+            print("\n", end="")
+            print(elementString(""),elementString(self.T[0][0].numerator, "/", self.T[0][0].denominator), "|", end="")
+            for j in range(1, self.n - self.m + 1):
+                print(elementString(self.T[0][j].numerator, "/", self.T[0][j].denominator), end="")
+            print("\n", end="")
+            print("------------------------------------------------------------------")
+            for i in range(1,self.m+1):
+                print(elementString("x_"+str(self.B[i-1])),elementString(self.T[i][0].numerator,"/",self.T[i][0].denominator),"|",end="")
+                for j in range(1,self.n-self.m+1):
+                    print(elementString(self.T[i][j].numerator,"/",self.T[i][j].denominator),end="")
+                print("\n",end="")
+            print("------------------------------------------------------------------")
 
 
 # A = [[0,3,1,1,0,0,0],[1,0,2,0,1,0,0],[1,2,0,0,0,1,0],[1,-1,0,0,0,0,1]]
@@ -216,11 +353,19 @@ b = [3,5,4,2]
 c = [-4,-7,-3,0,0,0,0]
 basis = [4,5,6,7]
 
+# A = [[Fraction(1,4),-8,-1,9,1,0,0],
+#      [Fraction(1,2),-12,Fraction(-1,2),3,0,1,0],
+#      [0,0,1,0,0,0,1]]
+# b = [0,0,1]
+# c = [Fraction(-3,4),20,Fraction(-1,2),6,0,0,0]
+# basis = [5,6,7]
+
 t = Tableau(A,b,c)
-t.simplex(basis,True)
+t.simplex(basis,tex=True)
 
 print(t.getCurrentSolution())
 print(t.getCurrentValue())
 
 
-t.determineAllVertices()
+t.printAllVertices(noDuplicates=True)
+t.printAllEdges(tex=True,style="ultra thick")
