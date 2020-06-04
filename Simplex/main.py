@@ -117,7 +117,12 @@ class Tableau:
         return True
 
 
-    def simplex(self,basis,verbose=False, tex=False):
+    def simplex(self,basis,verbose=False, tex=False, stepwise=False):
+        # The simplex-algorithm
+        # basis is a list containing the numbers of m variables that form a basis
+        # verbose == True prints the current tableau after every step
+        # stepwise == True stops after every pivot-step, continue with enter, end stepwise procedure with "r" and enter
+        # tex == True prints the tableaus in LaTeX-code
         if not self.hasStandardForm:
             self.T = self.standardizeTableau(basis)
             self.hasStandardForm = True
@@ -126,9 +131,17 @@ class Tableau:
             (p,s) = self.determinePivotElement()
             if verbose:
                 self.printTableau()
+                if stepwise:
+                    cont = input()
+                    if cont == "r":
+                        stepwise = False
                 print("Pivot-Element: ", p, s)
             if tex:
                 self.printTableau(True,pivot=(p,s))
+            if stepwise:
+                cont = input()
+                if cont == "r":
+                    stepwise = False
 
             if s == 0:
                 self.solved = True
@@ -234,7 +247,9 @@ class Tableau:
 
     def printAllEdges(self,tex=False,style=""):
         # Prints all Edges of the given polyhedron (i.e. pairs of neighbouring vertices)
-        # Either as text or in tikz-Format (with style as attribute for each edge)
+        # Either as text or in tikz-Format (with style as attribute for each edge).
+        # The latter implicetly assumes that the orginal problem has only three variables
+        # (i.e. its feasibility region can be drawn in 3D space) and all other variables are only slack variables.
 
         allVertices = self.determineAllVertices(onlyFeasible=True,noDuplicates=False)
         allEdges = self.determineAllEdges()
@@ -335,37 +350,26 @@ class Tableau:
             print("------------------------------------------------------------------")
 
 
-# A = [[0,3,1,1,0,0,0],[1,0,2,0,1,0,0],[1,2,0,0,0,1,0],[1,-1,0,0,0,0,1]]
-# b = [3,10,6,4]
+# Das Optimierungsproblem von Blatt 6/Aufgabe 1
+# A = [[0,3,1,1,0,0,0],
+#      [1,3,1,0,1,0,0],
+#      [1,2,0,0,0,1,0],
+#      [1,-1,0,0,0,0,1]]
+# b = [3,5,4,2]
 # c = [-4,-7,-3,0,0,0,0]
 # basis = [4,5,6,7]
 
-# A = [[1,2,3,1]]
-# b = [1]
-# c = [-1,0,0,0]
-# basis = [4]
-
-A = [[0,3,1,1,0,0,0],
-     [1,3,1,0,1,0,0],
-     [1,2,0,0,0,1,0],
-     [1,-1,0,0,0,0,1]]
-b = [3,5,4,2]
-c = [-4,-7,-3,0,0,0,0]
-basis = [4,5,6,7]
-
-# A = [[Fraction(1,4),-8,-1,9,1,0,0],
-#      [Fraction(1,2),-12,Fraction(-1,2),3,0,1,0],
-#      [0,0,1,0,0,0,1]]
-# b = [0,0,1]
-# c = [Fraction(-3,4),20,Fraction(-1,2),6,0,0,0]
-# basis = [5,6,7]
+# Das Optimierungsproblem von Blatt 6/Aufgabe 3
+# Zeigt das Kreiseln der Auswahlregel von Dantzig
+A = [[Fraction(1,4),-8,-1,9,1,0,0],
+     [Fraction(1,2),-12,Fraction(-1,2),3,0,1,0],
+     [0,0,1,0,0,0,1]]
+b = [0,0,1]
+c = [Fraction(-3,4),20,Fraction(-1,2),6,0,0,0]
+basis = [5,6,7]
 
 t = Tableau(A,b,c)
-t.simplex(basis,tex=True)
+t.simplex(basis,tex=False,verbose=True,stepwise=True)
 
 print(t.getCurrentSolution())
 print(t.getCurrentValue())
-
-
-t.printAllVertices(noDuplicates=True)
-t.printAllEdges(tex=True,style="ultra thick")
